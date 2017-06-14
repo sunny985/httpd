@@ -430,19 +430,54 @@ int startup(u_short *port)
 {
     int httpd = 0;
     int on = 1;
+	/* 描述因特网地址结构的数据结构 */
     struct sockaddr_in name;
-
+	
+    /* domain: 
+     *       PF_INET==AF_INET AF_INET6 AF_LOACL 
+     * 
+     * type:
+     *       SOCK_STREAM: TCP
+     *       SOCK_DGRAM: UDP
+     *       SOCK_RAW: other protocal
+     * protocol:
+     *        IPPROTO_TCP、IPPTOTO_UDP、IPPROTO_SCTP、IPPROTO_TIPC等，分别对应
+     *        TCP传输协议  UDP传输协议  STCP传输协议  TIPC传输协议
+     * 他们之间的组合不是任意的，当protocol为0时，选择type对应的默认协议
+     */
     httpd = socket(PF_INET, SOCK_STREAM, 0);
     if (httpd == -1)
         error_die("socket");
     memset(&name, 0, sizeof(name));
+	
+	/* AF_INET(地址族)  PF_INET(协议族) 实际是一样的，事实上是设计有问题*/
     name.sin_family = AF_INET;
+	
+	/* portnumber必须使用网络数字格式 */
     name.sin_port = htons(*port);
+	
+	/* 四个字节用来存储ip地址 
+	 * INADDR_ANY = 0 指服务器上的所有网卡
+	 */
     name.sin_addr.s_addr = htonl(INADDR_ANY);
+	
+	/* 设置与套接字关联的选项 
+     * sock: 将被设置的套接字
+     * level: 选项所在的协议层，为了操作套接字层的选项，应该讲level的值指定为SOL_SOCKET  
+     * optname: 需要访问的选项名
+                一般来说，一个端口释放后需要等待两分钟，之后才能再次被使用
+                SO_REUSEADDR是让端口被释放后立即可以被再次使用
+     * optval: 指向包含新选项值的缓冲
+     * optlen: 选项的长度
+	 */
     if ((setsockopt(httpd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))) < 0)  
     {  
         error_die("setsockopt failed");
     }
+	
+	/* 由于历史原因，在bind connect等系统调用中，特定协议的套接口地址结构指针
+     * 都要强制转换成该通用的套接口地址结构指针
+	 */
     if (bind(httpd, (struct sockaddr *)&name, sizeof(name)) < 0)
         error_die("bind");
     if (*port == 0)  /* if dynamically allocating a port */
@@ -452,6 +487,11 @@ int startup(u_short *port)
             error_die("getsockname");
         *port = ntohs(name.sin_port);
     }
+	
+	/* 让套接字进入被动监听状态，没有客户端请求时，套接字处于"睡眠"状态，有客户端请求时，
+	 * 套接字才会被"唤醒"
+	 * 请求队列的最大长度为5,当队列满时，Linux，客户端会收到 ECONNREFUSED 错误
+	 */
     if (listen(httpd, 5) < 0)
         error_die("listen");
     return(httpd);
@@ -500,6 +540,10 @@ int main(void)
 
     while (1)
     {
+        /* listen()只是让套接字进入监听状态，并没有接受请求，接受请求需要使用accpet()函数 
+		 * 返回一个新的套接字client_sock，用来和client端进行通信，还会返回client端的IP和port，被保存在client_name中
+         * 之后和client端进行通信时，要使用新生成的套接字client_sock
+		 */
         client_sock = accept(server_sock,
                 (struct sockaddr *)&client_name,
                 &client_name_len);

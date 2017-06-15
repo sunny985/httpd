@@ -65,7 +65,7 @@ void accept_request(void *arg)
     int cgi = 0;      /* becomes true if server decides this is a CGI
                        * program */
     char *query_string = NULL;
-
+    printf("accept_request\n");
     numchars = get_line(client, buf, sizeof(buf));
     i = 0; j = 0;
     while (!ISspace(buf[i]) && (i < sizeof(method) - 1))
@@ -320,7 +320,7 @@ int get_line(int sock, char *buf, int size)
     while ((i < size - 1) && (c != '\n'))
     {
         n = recv(sock, &c, 1, 0);
-        /* DEBUG printf("%02X\n", c); */
+        printf("%02X\n", c); 
         if (n > 0)
         {
             if (c == '\r')

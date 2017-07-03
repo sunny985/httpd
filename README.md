@@ -54,3 +54,56 @@ Compile for Linux
 <p>&nbsp; &nbsp; （10） 关闭与浏览器的连接，完成了一次 HTTP 请求与回应，因为 HTTP 是无连接的。</p>
 <p><br>
 </p>
+流程：
+1.客户端发起访问请求
+  在浏览器上访问http//192.168.9.104:4000
+2.服务端接受客户请求
+  接受的请求信息如下
+  GET / HTTP/1.1
+  Host: 172.16.2.44:4000 
+  Connection: keep-alive
+  Upgrade-Insecure-Requests: 1
+  User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.86 Safari/537.36
+  Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8
+  Accept-Encoding: gzip, deflate
+  Accept-Language: zh-CN,zh;q=0.8
+3.服务端响应客户请求
+  解析第一条请求信息，表示客户端要获取httpd服务器根目录下的内容，检查请求能够满足，将请求结果返回客户端，返回头如下：
+  HTTP/1.0 200 OK\r\n
+  Server: jdbhttpd/0.1.0\r\n
+  Content-Type: text/html\r\n
+  \r\n
+  然后将htdocs/index.html中的内容返回给客户端
+4.客户端接受到index.html中的内容并在网页上显示里面的内容
+5.客户端的用户在网页中输入颜色(如:red),点击提交
+6.服务端收到如下信息：
+  POST /color.cgi HTTP/1.1
+  Host: 172.16.2.44:4000
+  Connection: keep-alive
+  Content-Length: 9
+  Cache-Control: max-age=0
+  Origin: http://172.16.2.44:4000
+  Upgrade-Insecure-Requests: 1
+  User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.86 Safari/537.36
+  Content-Type: application/x-www-form-urlencoded
+  Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8
+  Referer: http://172.16.2.44:4000/
+  Accept-Encoding: gzip, deflate
+  Accept-Language: zh-CN,zh;q=0.8
+7.服务器端解析第一条请求，POST表示要在表示的资源后面添加新的内容
+8.接下来，服务器会fork一个子进程，用于执行color.cgi,父进程接受需要添加的新内容作为color.cgi的参数，
+  然后将color.cgi的执行结果返回给客户端
+
+管道文件描述符：
+    fd[0]用于读管道，fd[1]用于写管道
+管道读写规则：
+    管道创建时默认是阻塞模式
+    阻塞模式：
+	    当没有数据可读时，read会被阻塞，即进程暂停运行，直到有进程向管道写新的数据 
+		当缓冲区被写满时，write会被阻塞，直到有进程将数据读走
+	非阻塞模式：
+	    当没有数据可读时，read返回-1，error = EAGAIN
+		当缓冲区被写满时，write返回-1，error = EAGAIN
+	当所有写端描述符被关闭时，read返回0
+    当所有读端描述符被关闭时，write会产生信号SIGPIPE   
+    当要写入的数据量小于PIPE_BUF时，写操作会立即完成，	

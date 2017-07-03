@@ -65,7 +65,6 @@ void accept_request(void *arg)
     int cgi = 0;      /* becomes true if server decides this is a CGI
                        * program */
     char *query_string = NULL;
-    printf("accept_request\n");
     numchars = get_line(client, buf, sizeof(buf));
     i = 0; j = 0;
     while (!ISspace(buf[i]) && (i < sizeof(method) - 1))
@@ -75,7 +74,7 @@ void accept_request(void *arg)
     }
     j=i;
     method[i] = '\0';
-
+    // get method
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
     {
         unimplemented(client);
@@ -88,6 +87,7 @@ void accept_request(void *arg)
     i = 0;
     while (ISspace(buf[j]) && (j < numchars))
         j++;
+	// get url
     while (!ISspace(buf[j]) && (i < sizeof(url) - 1) && (j < numchars))
     {
         url[i] = buf[j];
@@ -107,10 +107,12 @@ void accept_request(void *arg)
             query_string++;
         }
     }
-
+    // path = htdocs/index.html
+    // path = htdocs/color.cgi
     sprintf(path, "htdocs%s", url);
     if (path[strlen(path) - 1] == '/')
         strcat(path, "index.html");
+	/* 获取文件path中的内容，并保存在结构体st中，成功返回0，失败返回-1 */
     if (stat(path, &st) == -1) {
         while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
             numchars = get_line(client, buf, sizeof(buf));
@@ -118,8 +120,15 @@ void accept_request(void *arg)
     }
     else
     {
+        /* S_IFMT是一个掩码，用于过滤出st_mode的前四位表示的文件类型
+         * S_IFDIR 表示文件时一个目录
+         */
         if ((st.st_mode & S_IFMT) == S_IFDIR)
             strcat(path, "/index.html");
+		/* S_IXUSR 文件所有者具有可执行权限 
+		 * S_IXGRP 用户组具有可执行权限
+		 * S_IXOTH 其他用户具有可执行权限
+		 */
         if ((st.st_mode & S_IXUSR) ||
                 (st.st_mode & S_IXGRP) ||
                 (st.st_mode & S_IXOTH)    )
@@ -243,7 +252,7 @@ void execute_cgi(int client, const char *path,
     {
     }
 
-
+    //创建管道cgi_output[0]用于读管道，cgi_output[1]用于写管道
     if (pipe(cgi_output) < 0) {
         cannot_execute(client);
         return;
@@ -264,12 +273,13 @@ void execute_cgi(int client, const char *path,
         char meth_env[255];
         char query_env[255];
         char length_env[255];
-
+        //dup2: 复制一个文件的描述符，经常用来重定向标准输入输出
         dup2(cgi_output[1], STDOUT);
         dup2(cgi_input[0], STDIN);
         close(cgi_output[0]);
         close(cgi_input[1]);
         sprintf(meth_env, "REQUEST_METHOD=%s", method);
+		//REQUEST_METHOD=POST
         putenv(meth_env);
         if (strcasecmp(method, "GET") == 0) {
             sprintf(query_env, "QUERY_STRING=%s", query_string);
@@ -287,6 +297,7 @@ void execute_cgi(int client, const char *path,
         if (strcasecmp(method, "POST") == 0)
             for (i = 0; i < content_length; i++) {
                 recv(client, &c, 1, 0);
+				//color=yellow
                 write(cgi_input[1], &c, 1);
             }
         while (read(cgi_output[0], &c, 1) > 0)
@@ -319,12 +330,17 @@ int get_line(int sock, char *buf, int size)
 
     while ((i < size - 1) && (c != '\n'))
     {
+        /* flag == 0，读取tcp buf中的数据，并从tcp buf中移除已读的字符 */
         n = recv(sock, &c, 1, 0);
-        printf("%02X\n", c); 
+        //printf("%02X\n", c); 
         if (n > 0)
         {
             if (c == '\r')
             {
+                /* flag == MSG_PEEK, 读取tcp buf中的数据但是不进行移除
+                 *下次读取依然能够读取到，可用于数据查询
+                 * 这里其实是\r\n = \n,\r =\n,读完一行加\n，但是不要\r
+                 */
                 n = recv(sock, &c, 1, MSG_PEEK);
                 /* DEBUG printf("%02X\n", c); */
                 if ((n > 0) && (c == '\n'))
@@ -339,6 +355,7 @@ int get_line(int sock, char *buf, int size)
             c = '\n';
     }
     buf[i] = '\0';
+	printf("buf = %s", buf);
 
     return(i);
 }
